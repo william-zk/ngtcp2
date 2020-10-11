@@ -1534,9 +1534,17 @@ int Handler::init(const Endpoint &ep, const sockaddr *sa, socklen_t salen,
 
   auto dis = std::uniform_int_distribution<uint8_t>(0, 255);
 
-  scid_.datalen = NGTCP2_SV_SCIDLEN;
-  std::generate(scid_.data, scid_.data + scid_.datalen,
+  //hack
+  if (config.sid != NULL) {
+    scid_.datalen = NGTCP2_SV_SCIDLEN;
+    //first oct
+    scid_.data[0] = 0;
+    memcpy(scid_.data+1, config.sid, scid_.datalen-1);
+  } else {
+    scid_.datalen = NGTCP2_SV_SCIDLEN;
+    std::generate(scid_.data, scid_.data + scid_.datalen,
                 [&dis]() { return dis(randgen); });
+  }
 
   ngtcp2_settings settings;
   ngtcp2_settings_default(&settings);
@@ -3504,6 +3512,8 @@ void config_set_default(Config &config) {
   config.max_dyn_length = 20_m;
   config.cc = "cubic"sv;
   config.initial_rtt = NGTCP2_DEFAULT_INITIAL_RTT;
+  // hack
+  config.sid = NULL;
 }
 } // namespace
 
@@ -3632,6 +3642,7 @@ Options:
               and window size is scaled up to this value.
               Default: )"
             << util::format_uint_iec(config.max_stream_window) << R"(
+  --sid server unique id for quic lb route
   -h, --help  Display this help and exit.
 
 ---
@@ -3684,6 +3695,7 @@ int main(int argc, char **argv) {
         {"send-trailers", no_argument, &flag, 22},
         {"max-window", required_argument, &flag, 23},
         {"max-stream-window", required_argument, &flag, 24},
+        {"sid", required_argument, &flag, 25},
         {nullptr, 0, nullptr, 0}};
 
     auto optidx = 0;
@@ -3897,6 +3909,9 @@ int main(int argc, char **argv) {
         } else {
           config.max_stream_window = n;
         }
+        break;
+      case 25:
+        config.sid = optarg;
         break;
       }
       break;
